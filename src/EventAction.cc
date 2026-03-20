@@ -36,9 +36,9 @@ void EventAction::EndOfEventAction(const G4Event *evt)
     for (G4int i = 1; i <= 4; i++)
     {
       const G4ThreeVector &pos = fBoundaryCrossings[i];
-      // 写入output.txt 覆盖模式
-      std::ofstream outFile("output.txt", std::ios::app);
-      outFile << eventCount << "\t" << i << "\t" << pos << G4endl;
+      std::ofstream outFile("output.csv", std::ios::app);
+      G4int eventId = GetEventNo();
+      outFile << eventId << "," << i << "," << pos.x() << "," << pos.y() << G4endl;
     }
   }
 }

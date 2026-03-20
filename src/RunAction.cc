@@ -31,16 +31,15 @@ RunAction::RunAction(EventAction *eventaction)
   // Set ntuple output file
   // analysisManager->SetNtupleFileName(0, "psfntuple");
   // 若不存在则创建
-  if (!std::ifstream("output.txt"))
+  if (!std::ifstream("output.csv"))
   {
-    std::ofstream outFile("output.txt");
+    std::ofstream outFile("output.csv");
     outFile.close();
   }
-  else // 若存在则清空
+  else
   {
-    std::ofstream outFile("output.txt", std::ios::trunc);
-    // 清空文件内容
-    outFile << "";
+    std::ofstream outFile("output.csv", std::ios::trunc);
+    outFile << "eventId" << "," << "moduleId" << "," << "Xid" << "," << "Yid" << G4endl;
     outFile.close();
   }
 }

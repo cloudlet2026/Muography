@@ -16,33 +16,50 @@ POCA_Z_WINDOW_MM = 120.0
     # 设置默认字体
 font_manager.fontManager.addfont("fonts/TimesSimSunRegular.ttf")
 plt.rcParams["font.family"] = "TimesSimSun" 
+
+# ---------------- 几何参数 ----------------
+# 探测器层z坐标（毫米）
+Z1 = 800.0   # 模块1
+Z2 = 600.0    # 模块2
+Z3 = -600.0   # 模块3
+Z4 = -800.0  # 模块4
+# ------------------------------------------
+
 def parse_output_file(filename):
     """
-    解析 output.txt 文件
+    解析 output.csv 文件
     返回字典: {event_id: {layer_id: coordinates}}
     """
     events = {}
     with open(filename, 'r') as f:
+        header = f.readline().strip()
         for line in f:
             line = line.strip()
             if not line:
                 continue
             
-            parts = line.split('\t')
-            if len(parts) >= 3:
+            parts = line.split(',')
+            if len(parts) >= 4:
                 event_id = int(parts[0])
                 layer_id = int(parts[1])
+                x = float(parts[2])
+                y = float(parts[3])
                 
-                # 解析坐标 (x,y,z)
-                coord_str = parts[2]
-                # 移除括号并解析坐标
-                match = re.search(r'\((.*?),(.*?),(.*?)\)', coord_str)
-                if match:
-                    x, y, z = float(match.group(1)), float(match.group(2)), float(match.group(3))
-                    
-                    if event_id not in events:
-                        events[event_id] = {}
-                    events[event_id][layer_id] = np.array([x, y, z])
+                # 根据moduleId设置z坐标
+                if layer_id == 1:
+                    z = Z1
+                elif layer_id == 2:
+                    z = Z2
+                elif layer_id == 3:
+                    z = Z3
+                elif layer_id == 4:
+                    z = Z4
+                else:
+                    z = 0.0
+                
+                if event_id not in events:
+                    events[event_id] = {}
+                events[event_id][layer_id] = np.array([x, y, z])
     
     return events
 
@@ -182,11 +199,11 @@ def scattering_angle_mrad(dir_top, dir_bottom_downward):
     theta = np.arccos(cos_theta)
     return float(theta * 1000.0)
 
-# 解析 output.txt 文件
-events = parse_output_file('./build/output.txt')
+# 解析 output.csv 文件
+events = parse_output_file('./build/output.csv')
 
 print("=" * 70)
-print("PoCA 算法 - 事件分析（带有效性筛选）")
+print("PoCA 算法 - 事件分析")
 print("=" * 70)
 
 # 统计信息
@@ -226,7 +243,7 @@ for event_id in sorted(events.keys()):
     
     # 计算 PoCA
     closest_approach, distance, poca_line1, poca_line2, t, s = poca_algorithm(
-        line1_start, line1_dir, line2_start, line2_dir, clamp_to_segment=True
+        line1_start, line1_dir, line2_start, line2_dir, clamp_to_segment=False
     )
     
     # 计算散射角：
@@ -327,7 +344,7 @@ if len(poca_points) > 0:
     ax1.view_init(elev=25, azim=45)
     ax1.tick_params(axis='both', which='major', labelsize=12)
     # plt.tight_layout()
-    plt.savefig('./poca_3d_visualization.png', dpi=300)
+    plt.savefig('./picture/poca_3d_visualization.png', dpi=300)
     print("\n3D图已保存到: poca_3d_visualization.png")
     
     # 图2: 二维投影图（XY平面）
@@ -352,7 +369,7 @@ if len(poca_points) > 0:
     # ax2.legend(fontsize=12)
     
     plt.tight_layout()
-    plt.savefig('./poca_2d_projection.png', dpi=300)
+    plt.savefig('./picture/poca_2d_projection.png', dpi=300)
     print("2D投影图已保存到: poca_2d_projection.png")
     
     # ========== 创建质量指标图 ==========
@@ -376,7 +393,7 @@ if len(poca_points) > 0:
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_density_heatmap.png', dpi=300)
+    plt.savefig('./picture/poca_density_heatmap.png', dpi=300)
     print("密度热图已保存到: poca_density_heatmap.png")
     
     # 图4: X轴投影
@@ -385,15 +402,13 @@ if len(poca_points) > 0:
     x_proj, x_bins = np.histogram(plot_points[:, 0], bins=80, range=range2d)
     x_centers = (x_bins[:-1] + x_bins[1:]) / 2
     ax.bar(x_centers, x_proj, width=x_bins[1]-x_bins[0], color='blue', alpha=0.7, edgecolor='black')
-    ax.axvline(-200, color='red', linestyle='--', linewidth=2, alpha=0.7)
-    ax.axvline(200, color='red', linestyle='--', linewidth=2, alpha=0.7)
     ax.set_xlabel('X (mm)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('X轴投影分布',fontsize=14)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_x_projection.png', dpi=300)
+    plt.savefig('./picture/poca_x_projection.png', dpi=300)
     print("X轴投影已保存到: poca_x_projection.png")
     
     # 图5: Y轴投影
@@ -402,15 +417,13 @@ if len(poca_points) > 0:
     y_proj, y_bins = np.histogram(plot_points[:, 1], bins=80, range=range2d)
     y_centers = (y_bins[:-1] + y_bins[1:]) / 2
     ax.bar(y_centers, y_proj, width=y_bins[1]-y_bins[0], color='red', alpha=0.7, edgecolor='black')
-    ax.axvline(-200, color='blue', linestyle='--', linewidth=2, alpha=0.7)
-    ax.axvline(200, color='blue', linestyle='--', linewidth=2, alpha=0.7)
     ax.set_xlabel('Y (mm)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('Y轴投影分布',fontsize=14)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_y_projection.png', dpi=300)
+    plt.savefig('./picture/poca_y_projection.png', dpi=300)
     print("Y轴投影已保存到: poca_y_projection.png")
     
     # 图6: Z坐标分布
@@ -419,16 +432,13 @@ if len(poca_points) > 0:
     z_proj, z_bins = np.histogram(plot_points[:, 2], bins=80, range=plot_zlim)
     z_centers = (z_bins[:-1] + z_bins[1:]) / 2
     ax.bar(z_centers, z_proj, width=z_bins[1]-z_bins[0], color='green', alpha=0.7, edgecolor='black')
-    ax.axvline(-20, color='red', linestyle='--', linewidth=2, alpha=0.7, label='物体边界')
-    ax.axvline(20, color='red', linestyle='--', linewidth=2, alpha=0.7)
     ax.set_xlabel('Z (mm)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('Z坐标分布',fontsize=14)
-    ax.legend(fontsize=12)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_z_distribution.png', dpi=300)
+    plt.savefig('./picture/poca_z_distribution.png', dpi=300)
     print("Z坐标分布已保存到: poca_z_distribution.png")
     
     # 图7: 散射角分布
@@ -437,37 +447,28 @@ if len(poca_points) > 0:
     # 只绘制通过过滤的点对应的散射角
     valid_angles = np.array(scatter_angles)
     ax.hist(valid_angles, bins=50, color='purple', alpha=0.7, edgecolor='black')
-    ax.axvline(np.mean(valid_angles), color='red', linestyle='--', linewidth=2, 
-               label=f'均值: {np.mean(valid_angles):.2f} mrad')
-    ax.axvline(np.median(valid_angles), color='orange', linestyle='--', linewidth=2,
-               label=f'中位数: {np.median(valid_angles):.2f} mrad')
     ax.set_xlabel('散射角 (mrad)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('散射角分布',fontsize=14)
-    ax.legend(fontsize=12)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_scatter_angle.png', dpi=300)
+    plt.savefig('./picture/poca_scatter_angle.png', dpi=300)
     print("散射角分布已保存到: poca_scatter_angle.png")
     
     # 图8: PoCA距离分布
     fig8 = plt.figure(figsize=(5, 3))
     ax = fig8.add_subplot(111)
     valid_distances = np.array(poca_distances)
-    ax.hist(valid_distances, bins=50, color='brown', alpha=0.7, edgecolor='black')
-    ax.axvline(np.mean(valid_distances), color='red', linestyle='--', linewidth=2,
-               label=f'均值: {np.mean(valid_distances):.2f} mm')
-    ax.axvline(np.median(valid_distances), color='orange', linestyle='--', linewidth=2,
-               label=f'中位数: {np.median(valid_distances):.2f} mm')
+    ax.hist(valid_distances, bins=100, color='brown', alpha=0.7, edgecolor='black')
     ax.set_xlabel('PoCA距离 (mm)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('PoCA最小距离分布',fontsize=14)
-    ax.legend(fontsize=12)
+    ax.set_xlim([0, 10])
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('./poca_distance.png', dpi=300)
+    plt.savefig('./picture/poca_distance.png', dpi=300)
     print("PoCA距离分布已保存到: poca_distance.png")
     
     # 显示所有图形

@@ -5,7 +5,7 @@
 #
 # Change the default number of workers (in multi-threading mode) 
 # Force single-thread run to avoid MT allocator issues
-/run/numberOfThreads 1
+# /run/numberOfThreads 1
 #
 # Initialize kernel
 /run/initialize
@@ -15,5 +15,5 @@
 /event/verbose 0
 /tracking/verbose 0
 
-/run/printProgress 100
+/run/printProgress 10000
 /run/beamOn 100000

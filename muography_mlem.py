@@ -3,7 +3,6 @@
 from __future__ import annotations
 import argparse
 import math
-import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -17,6 +16,8 @@ from sklearn.neighbors import NearestNeighbors
 
 # ----------------几何常数 ----------------
 PLANE_Z = {1: 800.0, 2: 600.0, 3: -600.0, 4: -800.0}  # mm
+# Z 多深度切片（指定 Z=-40,-20,-5,5,20,40 cm），2x3 布局
+target_z_vals = [-100, -30, -10, 0, 10, 30]
 # ROI 范围（可以通过 CLI 覆盖）
 DEFAULT_X_RANGE = (-600,600)
 DEFAULT_Y_RANGE = (-600,600)
@@ -25,14 +26,22 @@ DEFAULT_Z_RANGE = (PLANE_Z[3], PLANE_Z[2])
 # ----------------高地参数 ----------------
 HIGHLAND_K = 13.6  # MeV
 DEFAULT_MUON_MOMENTUM = 3000.0  # MeV/c，典型的宇宙μ子
-DEFAULT_RADIATION_LENGTH = 350.0  # mm, plastic-like
+# 参考辐射长度：使用空气作为基准（约304m = 304000mm）
+# 密度值表示相对于空气的散射能力倍数
+# 例如：密度=100表示该体素散射能力是空气的100倍
+DEFAULT_RADIATION_LENGTH = 304000.0  # mm, air
 font_manager.fontManager.addfont("fonts/TimesSimSunRegular.ttf")
 plt.rcParams["font.family"] = "TimesSimSun"  # 支持中字体
-# ----------------解析中 ----------------
-_COORD_PATTERN = re.compile(r"\((.*?),(.*?),(.*?)\)")
+
+# ---------------- 几何参数 ----------------
+Z1 = 800.0   # 模块1
+Z2 = 600.0    # 模块2
+Z3 = -600.0   # 模块3
+Z4 = -800.0  # 模块4
+# ------------------------------------------
 
 def parse_output(path: Path, max_events: int | None = None) -> Dict[int, Dict[int, np.ndarray]]:
-    """将output.txt解析为{event_id: {layer_id: np.array([x,y,z])}}。
+    """将output.csv解析为{event_id: {layer_id: np.array([x,y,z])}}。
     如果提供，则在 max_events（完成事件）之后停止。
     """
     events: Dict[int, Dict[int, np.ndarray]] = {}
@@ -41,15 +50,28 @@ def parse_output(path: Path, max_events: int | None = None) -> Dict[int, Dict[in
         line = line.strip()
         if not line:
             continue
-        parts = line.split('\t')
-        if len(parts) < 3:
+        # 跳过CSV表头
+        if line.startswith('eventId'):
+            continue
+        parts = line.split(',')
+        if len(parts) < 4:
             continue
         event_id = int(parts[0])
         layer_id = int(parts[1])
-        match = _COORD_PATTERN.search(parts[2])
-        if not match:
-            continue
-        x, y, z = (float(match.group(i)) for i in range(1, 4))
+        x = float(parts[2])
+        y = float(parts[3])
+        
+        # 根据layer_id设置z坐标
+        if layer_id == 1:
+            z = Z1
+        elif layer_id == 2:
+            z = Z2
+        elif layer_id == 3:
+            z = Z3
+        elif layer_id == 4:
+            z = Z4
+        else:
+            z = 0.0
 
         if event_id not in events:
             events[event_id] = {}
@@ -215,6 +237,17 @@ class EMLReconstructor:
         self.momentum = momentum_mev
         self.rad_len = radiation_length_mm
 
+    def compute_effective_path(self, evt: EventData, density_flat: np.ndarray) -> float:
+        """
+        计算体素密度加权的等效路径长度。
+        等效路径 = Σ(路径长度_i × 密度_i)
+        这个值用于计算等效的 x/X0
+        """
+        effective_path = 0.0
+        for vidx, path_len in evt.contributions.items():
+            effective_path += path_len * density_flat[vidx]
+        return effective_path
+
     def iterate(self) -> None:
         n_vox = self.grid.total_voxels()
         density_flat = self.grid.density.reshape(-1)
@@ -223,13 +256,16 @@ class EMLReconstructor:
         for evt in self.events:
             if not evt.contributions:
                 continue
-            weight_angle = highland_pdf(evt.angle_mrad, evt.total_length,
-                                        self.momentum, self.rad_len)
-            expected = 0.0
-            for vidx, path_len in evt.contributions.items():
-                expected += path_len * density_flat[vidx]
-            if expected <= 1e-12:
+            
+            effective_path = self.compute_effective_path(evt, density_flat)
+            
+            if effective_path <= 1e-12:
                 continue
+            
+            weight_angle = highland_pdf(evt.angle_mrad, effective_path,
+                                        self.momentum, self.rad_len)
+            
+            expected = effective_path
             norm = weight_angle / expected
             for vidx, path_len in evt.contributions.items():
                 new_density[vidx] += density_flat[vidx] * path_len * norm
@@ -246,7 +282,7 @@ class EMLReconstructor:
 
 # ----------------流水线 ----------------
 
-def save_density_plots(grid: VoxelGrid, prefix: str = "em_ml",
+def save_density_plots(grid: VoxelGrid, prefix: str = "./picture/mlem",
                        density_percentile: float = 90.0,
                        dbscan_eps_factor: float = 1.0,
                        dbscan_min_samples: int = 3,
@@ -258,8 +294,6 @@ def save_density_plots(grid: VoxelGrid, prefix: str = "em_ml",
     xy = np.sum(density, axis=2).T
     xz = np.sum(density, axis=1).T
     yz = np.sum(density, axis=0).T
-    z_profile = np.sum(density, axis=(0, 1))
-    z_coords = np.linspace(grid.z_range[0], grid.z_range[1], grid.nz)
 
     # 单独窗口：XY
     fig_xy, ax_xy = plt.subplots(figsize=(5, 4))
@@ -312,20 +346,6 @@ def save_density_plots(grid: VoxelGrid, prefix: str = "em_ml",
     plt.close(fig_yz)
     print(f"保存 YZ 投影到 {out_yz}")
 
-    # 单独窗口：Z 轮廓
-    fig_zp, ax_zp = plt.subplots(figsize=(5, 4))
-    ax_zp.plot(z_coords, z_profile, color="darkgreen")
-    ax_zp.set_title("Z 轮廓", fontsize=14)
-    ax_zp.set_xlabel("Z (mm)", fontsize=12)
-    ax_zp.set_ylabel("密度总和", fontsize=12)
-    ax_zp.tick_params(axis='both', labelsize=12)
-    ax_zp.set_xlim(plot_zlim)
-    ax_zp.grid(alpha=0.3)
-    fig_zp.tight_layout()
-    out_zp = f"{prefix}_z_profile.png"
-    fig_zp.savefig(out_zp, dpi=300)
-    plt.close(fig_zp)
-    print(f"保存 Z 轮廓到 {out_zp}")
 
     # 顶部体素的 3D 视图（使用DBSCAN聚类去除离散点）
     # 先筛选出所有非零密度的体素
@@ -420,8 +440,6 @@ def save_density_plots(grid: VoxelGrid, prefix: str = "em_ml",
     plt.close(fig_hist)
     print(f"保存密度直方图到 {out_hist}")
 
-    # Z 多深度切片（指定 Z=-40,-20,-5,5,20,40 cm），2x3 布局
-    target_z_vals = [-400, -200, -30, 30, 200, 400]
     # 将目标 Z 转成索引
     z_indices = []
     for z in target_z_vals:
@@ -459,29 +477,40 @@ def save_density_plots(grid: VoxelGrid, prefix: str = "em_ml",
     print(f"保存 Z 切片到 {outz}")
 
 
-def save_event_stats(events: List[EventData], rad_len_mm: float, prefix: str = "em_ml") -> None:
+def save_event_stats(events: List[EventData], rad_len_mm: float, prefix: str = "./picture/mlem") -> None:
     if not events:
         print("无事件可用于统计图。")
         return
 
     angles = np.array([e.angle_mrad for e in events], dtype=float)
     paths = np.array([e.total_length for e in events], dtype=float)
-    x_over_x0 = paths / max(rad_len_mm, 1e-9)
+    
+    x_over_x0_initial = paths / max(rad_len_mm, 1e-9)
+    
+    def angle_to_effective_x0(angle_mrad: float, momentum_mev: float) -> float:
+        """
+        根据散射角反推等效x/X0
+        使用高地公式: theta0 = (13.6/pc) * sqrt(x/X0) * (1 + 0.038*ln(x/X0))
+        简化为: x/X0 ≈ (theta0 * pc / 13.6)^2
+        """
+        theta0_rad = angle_mrad / 1000.0
+        x_over_x0 = (theta0_rad * momentum_mev / HIGHLAND_K) ** 2
+        return x_over_x0
+    
+    x_over_x0_effective = np.array([angle_to_effective_x0(a, DEFAULT_MUON_MOMENTUM) for a in angles])
 
     p90_angle = np.percentile(angles, 90)
     p50_angle = np.percentile(angles, 50)
-    p90_x0 = np.percentile(x_over_x0, 90)
-    p50_x0 = np.percentile(x_over_x0, 50)
+    p90_x0_eff = np.percentile(x_over_x0_effective, 90)
+    p50_x0_eff = np.percentile(x_over_x0_effective, 50)
+    print(f"散射角: P50={p50_angle:.2f} mrad, P90={p90_angle:.2f} mrad")
+    print(f"等效x/X0: P50={p50_x0_eff:.3f}, P90={p90_x0_eff:.3f}")
 
-    # 散射角直方图
     fig_a, ax_a = plt.subplots(figsize=(5, 3))
     ax_a.hist(angles, bins=100, log=True, color="steelblue", edgecolor="black")
-    ax_a.axvline(p50_angle, color="green", linestyle="--", label=f"P50={p50_angle:.2f} mrad")
-    ax_a.axvline(p90_angle, color="red", linestyle="--", label=f"P90={p90_angle:.2f} mrad")
     ax_a.set_xlabel("散射角 (mrad)", fontsize=12)
     ax_a.set_ylabel("计数 (log)", fontsize=12)
     ax_a.set_title("散射角分布", fontsize=14)
-    ax_a.legend(fontsize=12)
     ax_a.tick_params(axis='both', labelsize=12)
     fig_a.tight_layout()
     out_a = f"{prefix}_angle_hist.png"
@@ -489,18 +518,14 @@ def save_event_stats(events: List[EventData], rad_len_mm: float, prefix: str = "
     plt.close(fig_a)
     print(f"保存散射角直方图到 {out_a}")
 
-    # x/X0 直方图
     fig_x0, ax_x0 = plt.subplots(figsize=(5, 3))
-    ax_x0.hist(x_over_x0, bins=100, log=True, color="darkorange", edgecolor="black")
-    ax_x0.axvline(p50_x0, color="green", linestyle="--", label=f"P50={p50_x0:.3f}")
-    ax_x0.axvline(p90_x0, color="red", linestyle="--", label=f"P90={p90_x0:.3f}")
-    ax_x0.set_xlabel("x / X0", fontsize=12)
+    ax_x0.hist(x_over_x0_effective, bins=100, log=True, color="darkorange", edgecolor="black")
+    ax_x0.set_xlabel("等效 $x/X_0$ ", fontsize=12)
     ax_x0.set_ylabel("计数 (log)", fontsize=12)
-    ax_x0.set_title("路径长度分布", fontsize=14)
-    ax_x0.legend(fontsize=12)
+    ax_x0.set_title("等效 $x/X_0$ 分布", fontsize=14)
     ax_x0.tick_params(axis='both', labelsize=12)
     fig_x0.tight_layout()
-    out_x0f = f"{prefix}_xOverX0_hist.png"
+    out_x0f = f"{prefix}_xOverX_0_hist.png"
     fig_x0.savefig(out_x0f, dpi=300)
     plt.close(fig_x0)
     print(f"保存 x/X0 直方图到 {out_x0f}")
@@ -539,8 +564,8 @@ def build_events(raw_events: Dict[int, Dict[int, np.ndarray]], grid: VoxelGrid,
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="EM-ML缪子成像，处理 build/output.txt 文件")
-    parser.add_argument("--input", type=Path, default=Path("build/output.txt"), help="output.txt 文件路径")
+    parser = argparse.ArgumentParser(description="EM-ML缪子成像，处理 build/output.csv 文件")
+    parser.add_argument("--input", type=Path, default=Path("build/output.csv"), help="output.csv 文件路径")
     parser.add_argument("--voxel", type=float, default=10.0, help="体素大小 (mm)")
     parser.add_argument("--iterations", type=int, default=10, help="EM迭代次数")
     parser.add_argument("--max-events", type=int, default=50000, help="最大加载事件数 (近似; 需要完整事件)")
@@ -575,7 +600,7 @@ def main() -> None:
     recon.run(args.iterations)
     
     if not args.no_plot:
-        save_density_plots(grid, prefix="em_ml",
+        save_density_plots(grid, prefix="./picture/mlem",
                            density_percentile=args.density_percentile,
                            dbscan_eps_factor=args.dbscan_eps_factor,
                            dbscan_min_samples=args.dbscan_min_samples,

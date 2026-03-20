@@ -72,7 +72,6 @@ void SteppingAction::UserSteppingAction(const G4Step *theStep)
 	};
 
 	// 实际几何：World -> Envelope2 -> Envelope1 -> Shape1
-	// 固定的Z平面（与几何一致）：Env2半长=0.8 m，Env1半长=0.6 m
 	const G4double z_env2 = 0.8 * m;
 	const G4double z_env1 = 0.6 * m;
 

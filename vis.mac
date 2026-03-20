@@ -19,6 +19,7 @@
 # Disable auto refresh and quieten vis messages whilst scene and
 # trajectories are established:
 /vis/viewer/set/autoRefresh false
+/vis/viewer/set/auxiliaryEdge true
 /vis/viewer/set/lineSegmentsPerCircle 20
 /vis/verbose errors
 #
@@ -32,10 +33,10 @@
 /vis/viewer/zoom 60
 #
 # Specify style (surface or wireframe):
-/vis/viewer/set/style surface
+/vis/viewer/set/style wireframe
 #
 # Draw coordinate axes:
-/vis/scene/add/axes 0 0 0 5 cm
+/vis/scene/add/axes 0 0 0 10 cm
 #
 # Draw smooth trajectories at end of event, showing trajectory points
 # as markers 2 pixels wide:
@@ -65,6 +66,6 @@
 /vis/scene/endOfEventAction accumulate
 #
 # Re-establish auto refreshing and verbosity:
-/vis/viewer/set/lineSegmentsPerCircle 360
+/vis/viewer/set/lineSegmentsPerCircle 12
 /vis/viewer/set/autoRefresh true
 /vis/verbose warnings

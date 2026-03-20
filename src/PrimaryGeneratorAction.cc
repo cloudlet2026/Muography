@@ -101,7 +101,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event *anEvent)
   // 扩大源面覆盖范围，覆盖±400 mm 的探测区域
   G4double fParticleGun_size_x = 100. * cm;
   G4double fParticleGun_size_y = 100. * cm;
-  G4double fParticleGun_size_z = 81. * cm;
+  G4double fParticleGun_size_z = 101. * cm;
   double x_pos = (G4UniformRand() - 0.5) * fParticleGun_size_x;
   double y_pos = (G4UniformRand() - 0.5) * fParticleGun_size_y;
   double z_pos = fParticleGun_size_z;

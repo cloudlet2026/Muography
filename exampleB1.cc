@@ -22,7 +22,7 @@ int main(int argc, char **argv)
   }
   auto runManager = G4RunManagerFactory::CreateRunManager();
   // Force single-threaded mode to avoid allocator issues seen in MT runs
-  runManager->SetNumberOfThreads(1);
+  // runManager->SetNumberOfThreads(1);
   G4int seed = 123;
   if (argc > 2)
     seed = atoi(argv[argc - 1]);

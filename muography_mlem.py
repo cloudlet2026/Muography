@@ -525,7 +525,7 @@ def save_event_stats(events: List[EventData], rad_len_mm: float, prefix: str = "
     ax_x0.set_title("等效 $x/X_0$ 分布", fontsize=14)
     ax_x0.tick_params(axis='both', labelsize=12)
     fig_x0.tight_layout()
-    out_x0f = f"{prefix}_xOverX_0_hist.png"
+    out_x0f = f"{prefix}_xOverX0_hist.png"
     fig_x0.savefig(out_x0f, dpi=300)
     plt.close(fig_x0)
     print(f"保存 x/X0 直方图到 {out_x0f}")

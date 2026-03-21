@@ -308,8 +308,8 @@ if len(poca_points) > 0:
     poca_array = np.array(poca_points)
 
     # 邻域密度过滤，剔除比较离散的点
-    min_neighbors=14
-    radius=10.0
+    min_neighbors=8
+    radius=40.0
     filtered_points, _mask = filter_isolated_points(poca_array, radius=radius, min_neighbors=min_neighbors)
     if filtered_points is None or len(filtered_points) == 0:
         plot_points = poca_array
@@ -446,7 +446,7 @@ if len(poca_points) > 0:
     ax = fig7.add_subplot(111)
     # 只绘制通过过滤的点对应的散射角
     valid_angles = np.array(scatter_angles)
-    ax.hist(valid_angles, bins=50, color='purple', alpha=0.7, edgecolor='black')
+    ax.hist(valid_angles, bins=100, color='purple', alpha=0.7, edgecolor='black')
     ax.set_xlabel('散射角 (mrad)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('散射角分布',fontsize=14)
@@ -464,7 +464,6 @@ if len(poca_points) > 0:
     ax.set_xlabel('PoCA距离 (mm)',fontsize=12)
     ax.set_ylabel('事件计数',fontsize=12)
     ax.set_title('PoCA最小距离分布',fontsize=14)
-    ax.set_xlim([0, 10])
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()

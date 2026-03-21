@@ -121,66 +121,43 @@ G4VPhysicalVolume *DetectorConstruction::Construct()
 					  0,			   // copy number
 					  checkOverlaps);  // overlaps checking
 
-
 	// 圆柱体铅罐1: 高15cm, 外径10cm, 壁厚2cm, 位置(0, 0, 0)cm
+	// 使用布尔减法：实心大圆柱 - 实心小圆柱 = 封闭空心圆柱（保留顶和底）
 	//
 	G4double leadCyl1_height = 15. * cm;
 	G4double leadCyl1_outerRadius = 5. * cm; // 外径10cm
 	G4double leadCyl1_thickness = 2. * cm;
-	G4double leadCyl1_innerRadius = leadCyl1_outerRadius - leadCyl1_thickness; // 内半径10cm
+	G4double leadCyl1_innerRadius = leadCyl1_outerRadius - leadCyl1_thickness; // 内半径3cm
 	G4Material *leadCyl_mat = plumbum;
 
-	// 空心圆柱：直接使用G4Tubs的内外半径参数
-	auto solidLeadCyl1 = new G4Tubs("LeadCyl1",
-						 leadCyl1_innerRadius, leadCyl1_outerRadius, 0.5 * leadCyl1_height,
-						 0. * deg, 360. * deg);
+	// 外部实心圆柱
+	auto solidLeadCyl1_outer = new G4Tubs("LeadCyl1_outer",
+										  0., leadCyl1_outerRadius, 0.5 * leadCyl1_height,
+										  0. * deg, 360. * deg);
+
+	// 内部实心圆柱
+	auto solidLeadCyl1_inner = new G4Tubs("LeadCyl1_inner",
+										  0., leadCyl1_innerRadius, 0.5 * (leadCyl1_height - leadCyl1_thickness),
+										  0. * deg, 360. * deg);
+
+	// 布尔减法：外圆柱 - 内圆柱 = 封闭空心圆柱
+	auto solidLeadCyl1 = new G4SubtractionSolid("LeadCyl1",
+												solidLeadCyl1_outer,
+												solidLeadCyl1_inner);
 
 	auto logicLeadCyl1 = new G4LogicalVolume(solidLeadCyl1,
 											 leadCyl_mat,
 											 "LeadCyl1");
 	logicLeadCyl1->SetUserLimits(userLimits);
 	new G4PVPlacement(nullptr,
-				  G4ThreeVector(0., 0., 0.),
-				  logicLeadCyl1,
-				  "LeadCyl1",
-				  logicEnv1,
-				  false,
-				  0,
-				  checkOverlaps);
+					  G4ThreeVector(0., 0., 0.),
+					  logicLeadCyl1,
+					  "LeadCyl1",
+					  logicEnv1,
+					  false,
+					  0,
+					  checkOverlaps);
 
-	// 顶盖和底盖（实心圆柱）
-	G4double leadCyl1_capThickness = leadCyl1_thickness;
-	
-	auto solidLeadCyl1_top = new G4Tubs("LeadCyl1_top",
-						 0., leadCyl1_outerRadius, 0.5 * leadCyl1_capThickness,
-						 0. * deg, 360. * deg);
-	auto logicLeadCyl1_top = new G4LogicalVolume(solidLeadCyl1_top,
-											 leadCyl_mat,
-											 "LeadCyl1_top");
-	new G4PVPlacement(nullptr,
-				  G4ThreeVector(0., 0., 0.5 * leadCyl1_height + 0.5 * leadCyl1_capThickness),
-				  logicLeadCyl1_top,
-				  "LeadCyl1_top",
-				  logicEnv1,
-				  false,
-				  0,
-				  checkOverlaps);
-
-	auto solidLeadCyl1_bottom = new G4Tubs("LeadCyl1_bottom",
-						 0., leadCyl1_outerRadius, 0.5 * leadCyl1_capThickness,
-						 0. * deg, 360. * deg);
-	auto logicLeadCyl1_bottom = new G4LogicalVolume(solidLeadCyl1_bottom,
-											 leadCyl_mat,
-											 "LeadCyl1_bottom");
-	new G4PVPlacement(nullptr,
-				  G4ThreeVector(0., 0., -0.5 * leadCyl1_height - 0.5 * leadCyl1_capThickness),
-				  logicLeadCyl1_bottom,
-				  "LeadCyl1_bottom",
-				  logicEnv1,
-				  false,
-				  0,
-				  checkOverlaps);
-	
 	// 可视化属性------------------------------------------------
 
 	auto visAttributes = new G4VisAttributes(G4Colour(1.0, 1.0, 1.0));
@@ -190,8 +167,6 @@ G4VPhysicalVolume *DetectorConstruction::Construct()
 	visAttributes = new G4VisAttributes(G4Colour(0.2, 0.4, 0.8, 0.9));
 	visAttributes->SetVisibility(true);
 	logicLeadCyl1->SetVisAttributes(visAttributes);
-	logicLeadCyl1_top->SetVisAttributes(visAttributes);
-	logicLeadCyl1_bottom->SetVisAttributes(visAttributes);
 
 	visAttributes = new G4VisAttributes(G4Colour(0.0, 0.8, 0.5, 0.5));
 	visAttributes->SetVisibility(true);
